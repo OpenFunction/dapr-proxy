@@ -1,0 +1,358 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pubsub-subscriber-proxy
+  labels:
+    app: pubsub-subscriber-proxy
+    case: pubsub
+spec:
+  ports:
+    - name: http
+      port: 50001
+      targetPort: 50001
+  selector:
+    app: pubsub-subscriber-proxy
+    case: pubsub
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-subscriber-proxy
+  labels:
+    app: pubsub-subscriber-proxy
+    case: pubsub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pubsub-subscriber-proxy
+      case: pubsub
+  template:
+    metadata:
+      labels:
+        app: pubsub-subscriber-proxy
+        case: pubsub
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "pubsub-subscriber"
+        dapr.io/app-port: "50003"
+        dapr.io/log-as-json: "true"
+        dapr.io/app-protocol: "grpc"
+        dapr.io/sidecar-listen-addresses: "[::],0.0.0.0"
+    spec:
+      containers:
+        - name: sub
+          image: openfunctiondev/dapr-proxy:ci
+          imagePullPolicy: Always
+          env:
+            - name: FUNC_CONTEXT
+              value: |
+                {
+                  "name": "pubsub-subscriber",
+                  "version": "v1",
+                  "requestID": "a0f2ad8d-5062-4812-91e9-95416489fb01",
+                  "port": "50003",
+                  "prePlugins": ["plugin-custom", "plugin-example"],
+                  "postPlugins": ["plugin-custom", "plugin-example"],
+                  "inputs": {
+                    "pub": {
+                      "uri": "pubsub-topic",
+                      "componentName": "pubsub-subscriber",
+                      "componentType": "pubsub.kafka"
+                    }
+                  },
+                  "outputs": {},
+                  "runtime": "Async"
+                }
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              value: default
+          ports:
+            - containerPort: 50003
+              name: function-port
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pubsub-subscriber
+  labels:
+    app: pubsub-subscriber
+    case: pubsub
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 50003
+      targetPort: 50003
+  selector:
+    app: pubsub-subscriber
+    case: pubsub
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-subscriber
+  labels:
+    app: pubsub-subscriber
+    case: pubsub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pubsub-subscriber
+      case: pubsub
+  template:
+    metadata:
+      labels:
+        app: pubsub-subscriber
+        case: pubsub
+    spec:
+      containers:
+        - name: sub
+          image: openfunctiondev/pubsub_e2e_subscriber:latest
+          imagePullPolicy: Always
+          env:
+            - name: FUNC_CONTEXT
+              value: |
+                {
+                  "name": "pubsub-subscriber",
+                  "version": "v1",
+                  "requestID": "a0f2ad8d-5062-4812-91e9-95416489fb01",
+                  "port": "50003",
+                  "prePlugins": ["plugin-custom", "plugin-example"],
+                  "postPlugins": ["plugin-custom", "plugin-example"],
+                  "inputs": {
+                    "pub": {
+                      "uri": "pubsub-topic",
+                      "componentName": "pubsub-subscriber",
+                      "componentType": "pubsub.kafka"
+                    }
+                  },
+                  "outputs": {},
+                  "runtime": "Async"
+                }
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              value: default
+            - name: DAPR_HOST
+              value: pubsub-subscriber-proxy.default.svc.cluster.local
+          ports:
+            - containerPort: 50003
+              name: function-port
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pubsub-publisher-proxy
+  labels:
+    app: pubsub-publisher-proxy
+    case: pubsub
+spec:
+  ports:
+    - name: http
+      port: 50001
+      targetPort: 50001
+  selector:
+    app: pubsub-publisher-proxy
+    case: pubsub
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-publisher-proxy
+  labels:
+    app: pubsub-publisher-proxy
+    case: pubsub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pubsub-publisher-proxy
+      case: pubsub
+  template:
+    metadata:
+      labels:
+        app: pubsub-publisher-proxy
+        case: pubsub
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "pubsub-publisher"
+        dapr.io/app-port: "50003"
+        dapr.io/log-as-json: "true"
+        dapr.io/app-protocol: "grpc"
+        dapr.io/sidecar-listen-addresses: "[::],0.0.0.0"
+    spec:
+      containers:
+        - name: pub
+          image: openfunctiondev/dapr-proxy:ci
+          imagePullPolicy: Always
+          env:
+            - name: FUNC_CONTEXT
+              value: |
+                {
+                  "name": "pubsub-publisher",
+                  "version": "v1",
+                  "requestID": "a0f2ad8d-5062-4812-91e9-95416489fb01",
+                  "port": "50003",
+                  "inputs": {
+                    "cron": {
+                      "componentName": "cron-for-pubsub",
+                      "componentType": "bindings.cron"
+                    }
+                  },
+                  "outputs": {
+                    "subscriber": {
+                      "uri": "pubsub-topic",
+                      "componentName": "pubsub-publisher",
+                      "componentType": "pubsub.kafka"
+                    }
+                  },
+                  "runtime": "Async"
+                }
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              value: default
+          ports:
+            - containerPort: 50003
+              name: function-port
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pubsub-publisher
+  labels:
+    app: pubsub-publisher
+    case: pubsub
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 50003
+      targetPort: 50003
+  selector:
+    app: pubsub-publisher
+    case: pubsub
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pubsub-publisher
+  labels:
+    app: pubsub-publisher
+    case: pubsub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pubsub-publisher
+      case: pubsub
+  template:
+    metadata:
+      labels:
+        app: pubsub-publisher
+        case: pubsub
+    spec:
+      containers:
+        - name: pub
+          image: openfunctiondev/pubsub_e2e_publisher:latest
+          imagePullPolicy: Always
+          env:
+            - name: FUNC_CONTEXT
+              value: |
+                {
+                  "name": "pubsub-publisher",
+                  "version": "v1",
+                  "requestID": "a0f2ad8d-5062-4812-91e9-95416489fb01",
+                  "port": "50003",
+                  "inputs": {
+                    "cron": {
+                      "componentName": "cron-for-pubsub",
+                      "componentType": "bindings.cron"
+                    }
+                  },
+                  "outputs": {
+                    "subscriber": {
+                      "uri": "pubsub-topic",
+                      "componentName": "pubsub-publisher",
+                      "componentType": "pubsub.kafka"
+                    }
+                  },
+                  "runtime": "Async"
+                }
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              value: default
+            - name: DAPR_HOST
+              value: pubsub-publisher-proxy.default.svc.cluster.local
+          ports:
+            - containerPort: 50003
+              name: function-port
+              protocol: TCP
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub-subscriber
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    - name: brokers
+      value: "kafka-server-kafka-brokers:9092"
+    - name: consumerGroup
+      value: "pubsub-subscriber"
+    - name: authRequired
+      value: "false"
+    - name: disableTls
+      value: "true"
+    - name: authType
+      value: "none"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: pubsub-publisher
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    - name: brokers
+      value: "kafka-server-kafka-brokers:9092"
+    - name: consumerGroup
+      value: "pubsub-publisher"
+    - name: authRequired
+      value: "false"
+    - name: disableTls
+      value: "true"
+    - name: authType
+      value: "none"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: cron-for-pubsub
+spec:
+  type: bindings.cron
+  version: v1
+  metadata:
+    - name: schedule
+      value: "@every 2s"
