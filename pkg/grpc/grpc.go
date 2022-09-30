@@ -302,12 +302,3 @@ func GetDialAddressPrefix(mode modes.DaprMode) string {
 		return ""
 	}
 }
-
-func NeedRemove(ep lb.Endpoint, eps []lb.Endpoint) bool {
-	for _, item := range eps {
-		if lb.DeepEqual(ep, item) {
-			return true
-		}
-	}
-	return false
-}
