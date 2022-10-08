@@ -42,7 +42,7 @@ spec:
     spec:
       containers:
         - name: sub
-          image: openfunctiondev/dapr-proxy:ci
+          image: kind-registry:5000/openfunctiondev/dapr-proxy:ci
           imagePullPolicy: Always
           env:
             - name: FUNC_CONTEXT
@@ -194,7 +194,7 @@ spec:
     spec:
       containers:
         - name: pub
-          image: openfunctiondev/dapr-proxy:ci
+          image: kind-registry:5000/openfunctiondev/dapr-proxy:ci
           imagePullPolicy: Always
           env:
             - name: FUNC_CONTEXT
