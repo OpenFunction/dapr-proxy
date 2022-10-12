@@ -57,8 +57,8 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46/go.mod h1:3wb06e3pkSAbeQ52E9H9iFoQsEEwGN64994WTCIhntQ=
 github.com/NYTimes/gziphandler v1.1.1/go.mod h1:n/CVRwUEOgIxrgPvAQhUUr9oeUtvrhMomdKFjzJNB0c=
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
-github.com/OpenFunction/functions-framework-go v0.0.0-20220925145105-86f7bcc9cf8c h1:TFstl4SFFVZpd2+2yhVGjW15em/lV9NJ7NGoM6kaUHQ=
-github.com/OpenFunction/functions-framework-go v0.0.0-20220925145105-86f7bcc9cf8c/go.mod h1:ussM725MZuGmAH4PPmwGdHoDxIT4oSx7VK5Wiibg/No=
+github.com/OpenFunction/functions-framework-go v0.5.0 h1:s2L4PyazI8EoPzrfW0Es1esCSZS2SFXD6KNXyDKaJKc=
+github.com/OpenFunction/functions-framework-go v0.5.0/go.mod h1:+uYjTEYmn2uqIyViZtg9OF+bUNdjbkWNd7jrQWc7iEc=
 github.com/PuerkitoBio/purell v1.1.1 h1:WEQqlqaGbrPkxLJWfBwQmfEAE1Z7ONdDLqrN38tNFfI=
 github.com/PuerkitoBio/purell v1.1.1/go.mod h1:c11w/QuzBsJSee3cPx9rAFu61PvFxuPbtSwDGJws/X0=
 github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 h1:d+Bc7a5rLufV/sSk/8dngufqelfh6jnri85riMAaF/M=

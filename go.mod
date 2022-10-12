@@ -3,7 +3,7 @@ module github.com/OpenFunction/dapr-proxy
 go 1.18
 
 require (
-	github.com/OpenFunction/functions-framework-go v0.0.0-20220925145105-86f7bcc9cf8c
+	github.com/OpenFunction/functions-framework-go v0.5.0
 	github.com/dapr/components-contrib v1.8.1-rc.1
 	github.com/dapr/dapr v1.8.3
 	github.com/dapr/go-sdk v1.5.0

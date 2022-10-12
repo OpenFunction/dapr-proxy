@@ -6,15 +6,17 @@ import (
 	"strconv"
 	"time"
 
-	proxyruntime "github.com/OpenFunction/dapr-proxy/pkg/runtime"
-	"github.com/OpenFunction/dapr-proxy/pkg/utils"
 	ofctx "github.com/OpenFunction/functions-framework-go/context"
 	"github.com/OpenFunction/functions-framework-go/framework"
+	"github.com/cenkalti/backoff/v4"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
 	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
+
+	proxyruntime "github.com/OpenFunction/dapr-proxy/pkg/runtime"
+	"github.com/OpenFunction/dapr-proxy/pkg/utils"
 )
 
 const (
@@ -48,16 +50,19 @@ func main() {
 	port, _ := strconv.Atoi(funcContext.GetPort())
 	protocol := utils.GetEnvVar(protocolEnvVar, defaultAppProtocol)
 	config := &proxyruntime.Config{
-		Protocol: runtime.Protocol(protocol),
-		Host:     host,
-		Port:     port,
-		Mode:     modes.KubernetesMode,
+		Protocol:      runtime.Protocol(protocol),
+		Host:          host,
+		Port:          port,
+		Mode:          modes.KubernetesMode,
+		MaxBufferSize: 1000000,
 	}
 
 	FuncRuntime = proxyruntime.NewFuncRuntime(config, funcContext)
 	if err := FuncRuntime.CreateFuncChannel(); err != nil {
 		klog.Exit(err)
 	}
+
+	go FuncRuntime.ProcessEvents()
 
 	if err := fwk.Register(ctx, EventHandler); err != nil {
 		klog.Exit(err)
@@ -75,35 +80,37 @@ func EventHandler(ctx ofctx.Context, in []byte) (ofctx.Out, error) {
 		klog.V(4).Infof("Input: %s - Event Forwarding Elapsed: %vms", ctx.GetInputName(), elapsed)
 	}()
 
-	// Forwarding BindingEvent
+	c := ctx.GetNativeContext()
+
+	// Handle BindingEvent
 	bindingEvent := ctx.GetBindingEvent()
 	if bindingEvent != nil {
-		data, err := FuncRuntime.OnBindingEvent(ctx, bindingEvent)
-		if err != nil {
-			klog.Error(err)
-			return ctx.ReturnOnInternalError(), err
-		} else {
-			out := new(ofctx.FunctionOut)
-			out.WithData(data)
-			out.WithCode(ofctx.Success)
-			return out, nil
-		}
+		FuncRuntime.EnqueueBindingEvent(&c, bindingEvent)
 	}
 
-	// Forwarding TopicEvent
+	// Handle TopicEvent
 	topicEvent := ctx.GetTopicEvent()
 	if topicEvent != nil {
-		err := FuncRuntime.OnTopicEvent(ctx, topicEvent)
-		if err != nil {
-			klog.Error(err)
-			return ctx.ReturnOnInternalError(), err
-		} else {
-			out := new(ofctx.FunctionOut)
-			out.WithCode(ofctx.Success)
-			return out, nil
-		}
+		FuncRuntime.EnqueueTopicEvent(&c, topicEvent)
 	}
 
-	err := errors.New("Only Binding and Pubsub events are supported")
-	return ctx.ReturnOnInternalError(), err
+	var resp *proxyruntime.EventResponse
+	err := backoff.Retry(func() error {
+		resp = FuncRuntime.GetEventResponse(&c)
+		if resp == nil {
+			return errors.New("Failed to get event response")
+		}
+		return nil
+	}, utils.NewExponentialBackOff())
+
+	if err != nil {
+		e := errors.New("Processing event timeout")
+		klog.Error(e)
+		return ctx.ReturnOnInternalError(), e
+	} else {
+		out := new(ofctx.FunctionOut)
+		out.WithData(resp.Data)
+		out.WithCode(ofctx.Success)
+		return out, nil
+	}
 }
