@@ -100,7 +100,7 @@ func (g *Manager) StartEndpointsDetection() {
 				}
 			}
 
-			for ep, _ := range endpoints {
+			for ep := range endpoints {
 				conn, teardown, err := g.getGRPCConnection(context.TODO(), ep.String(), "", "", true, false, g.sslEnabled)
 				teardown()
 				state := conn.GetState()
@@ -108,6 +108,8 @@ func (g *Manager) StartEndpointsDetection() {
 					klog.Error(err)
 				} else if state == connectivity.Ready || state == connectivity.Idle {
 					g.balancer.Add(ep)
+				} else {
+					g.balancer.Remove(ep)
 				}
 			}
 			time.Sleep(200 * time.Millisecond)
@@ -131,7 +133,9 @@ func (g *Manager) GetGRPCConnection() (*grpc.ClientConn, func(), error) {
 		state := conn.GetState()
 		if state != connectivity.Ready && state != connectivity.Idle {
 			g.balancer.Remove(address)
-			delete(g.connectionPool.pool, address.String())
+			g.lock.Lock()
+			defer g.lock.Unlock()
+			g.connectionPool.Remove(address.String())
 			teardown()
 		}
 	}, nil
@@ -255,6 +259,13 @@ func (p *connectionPool) Register(address string, conn *grpc.ClientConn) {
 	p.referenceLock.Lock()
 	defer p.referenceLock.Unlock()
 	p.referenceCount[conn] = 2
+}
+
+func (p *connectionPool) Remove(address string) {
+	if conn, ok := p.pool[address]; ok {
+		delete(p.pool, address)
+		conn.Close()
+	}
 }
 
 func (p *connectionPool) Share(address string) (*grpc.ClientConn, bool) {

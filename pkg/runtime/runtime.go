@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	nethttp "net/http"
-	"sync"
 
 	ofctx "github.com/OpenFunction/functions-framework-go/context"
 	"github.com/cenkalti/backoff/v4"
@@ -33,9 +32,23 @@ type Config struct {
 	MaxBufferSize int
 }
 
-type EventRequest struct {
-	ctx *context.Context
-	ofctx.EventRequest
+type Event struct {
+	ctx          *context.Context
+	bindingEvent *common.BindingEvent
+	topicEvent   *common.TopicEvent
+	respCh       chan *EventResponse
+}
+
+func NewEvent(ctx *context.Context,
+	bindingEvent *common.BindingEvent,
+	topicEvent *common.TopicEvent,
+	respCh chan *EventResponse) Event {
+	return Event{
+		ctx:          ctx,
+		bindingEvent: bindingEvent,
+		topicEvent:   topicEvent,
+		respCh:       respCh,
+	}
 }
 
 type EventResponse struct {
@@ -43,30 +56,19 @@ type EventResponse struct {
 	Error error
 }
 
-type ResponseMap struct {
-	l *sync.RWMutex
-	m map[*context.Context]*EventResponse
-}
-
 type Runtime struct {
 	config      *Config
 	ctx         *ofctx.FunctionContext
 	grpc        *grpc.Manager
 	funcChannel channel.AppChannel
-	reqChan     chan *EventRequest
-	respMap     *ResponseMap
+	events      chan *Event
 }
 
 func NewFuncRuntime(config *Config, ctx *ofctx.FunctionContext) *Runtime {
-	lock := new(sync.RWMutex)
 	return &Runtime{
-		config:  config,
-		ctx:     ctx,
-		reqChan: make(chan *EventRequest, config.MaxBufferSize),
-		respMap: &ResponseMap{
-			l: lock,
-			m: make(map[*context.Context]*EventResponse),
-		},
+		config: config,
+		ctx:    ctx,
+		events: make(chan *Event, config.MaxBufferSize),
 	}
 }
 
@@ -89,76 +91,59 @@ func (r *Runtime) CreateFuncChannel() error {
 	return nil
 }
 
+func (r *Runtime) GetPendingEventsCount() int {
+	return len(r.events)
+}
+
 func (r *Runtime) ProcessEvents() {
-	for e := range r.reqChan {
-		if e.BindingEvent != nil {
-			var data []byte
-			// Retry on connection error.
-			err := backoff.Retry(func() error {
-				var err error
-				data, err = r.OnBindingEvent(e.ctx, e.BindingEvent)
-				if err != nil {
-					klog.V(4).Info(err)
-					return err
-				}
-				return nil
-			}, utils.NewExponentialBackOff())
+	for e := range r.events {
+		if e.bindingEvent != nil {
+			go func() {
+				var data []byte
+				// Retry on connection error.
+				err := backoff.Retry(func() error {
+					var err error
+					data, err = r.OnBindingEvent(e.ctx, e.bindingEvent)
+					if err != nil {
+						klog.V(4).Info(err)
+						return err
+					}
+					return nil
+				}, utils.NewExponentialBackOff())
 
-			resp := EventResponse{
-				Data:  data,
-				Error: err,
-			}
-			r.respMap.l.Lock()
-			r.respMap.m[e.ctx] = &resp
-			r.respMap.l.Unlock()
+				resp := EventResponse{
+					Data:  data,
+					Error: err,
+				}
+				e.respCh <- &resp
+			}()
 		}
 
-		if e.TopicEvent != nil {
-			// Retry on connection error.
-			err := backoff.Retry(func() error {
-				var err error
-				err = r.OnTopicEvent(e.ctx, e.TopicEvent)
-				if err != nil {
-					return err
-				}
-				return nil
-			}, utils.NewExponentialBackOff())
+		if e.topicEvent != nil {
+			go func() {
+				// Retry on connection error.
+				err := backoff.Retry(func() error {
+					var err error
+					err = r.OnTopicEvent(e.ctx, e.topicEvent)
+					if err != nil {
+						klog.V(4).Info(err)
+						return err
+					}
+					return nil
+				}, utils.NewExponentialBackOff())
 
-			resp := EventResponse{
-				Data:  nil,
-				Error: err,
-			}
-			r.respMap.l.Lock()
-			r.respMap.m[e.ctx] = &resp
-			r.respMap.l.Unlock()
+				resp := EventResponse{
+					Data:  nil,
+					Error: err,
+				}
+				e.respCh <- &resp
+			}()
 		}
 	}
 }
 
-func (r *Runtime) EnqueueBindingEvent(ctx *context.Context, event *common.BindingEvent) {
-	req := EventRequest{
-		ctx:          ctx,
-		EventRequest: ofctx.EventRequest{BindingEvent: event},
-	}
-	r.reqChan <- &req
-}
-
-func (r *Runtime) EnqueueTopicEvent(ctx *context.Context, event *common.TopicEvent) {
-	req := EventRequest{
-		ctx:          ctx,
-		EventRequest: ofctx.EventRequest{TopicEvent: event},
-	}
-	r.reqChan <- &req
-}
-
-func (r *Runtime) GetEventResponse(ctx *context.Context) *EventResponse {
-	defer r.respMap.l.Unlock()
-	r.respMap.l.Lock()
-	if resp, ok := r.respMap.m[ctx]; ok {
-		delete(r.respMap.m, ctx)
-		return resp
-	}
-	return nil
+func (r *Runtime) EnqueueEvent(event *Event) {
+	r.events <- event
 }
 
 func (r *Runtime) OnBindingEvent(ctx *context.Context, event *common.BindingEvent) ([]byte, error) {
