@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OpenFunction/dapr-proxy/pkg/lb"
 	"github.com/dapr/dapr/pkg/channel"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -20,6 +19,8 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials"
 	"k8s.io/klog/v2"
+
+	"github.com/OpenFunction/dapr-proxy/pkg/lb"
 )
 
 type endpoint string
@@ -89,7 +90,7 @@ func (g *Manager) StartEndpointsDetection() {
 					endpoints[ep] = true
 				}
 			} else {
-				klog.Error(err)
+				klog.V(4).Info(err)
 			}
 
 			oldEndpoints := g.balancer.All()
@@ -107,11 +108,9 @@ func (g *Manager) StartEndpointsDetection() {
 					klog.Error(err)
 				} else if state == connectivity.Ready || state == connectivity.Idle {
 					g.balancer.Add(ep)
-				} else {
-					g.balancer.Remove(ep)
 				}
 			}
-			time.Sleep(time.Second)
+			time.Sleep(200 * time.Millisecond)
 		}
 	}()
 }
@@ -119,12 +118,12 @@ func (g *Manager) StartEndpointsDetection() {
 func (g *Manager) GetGRPCConnection() (*grpc.ClientConn, func(), error) {
 	address, _ := g.balancer.Next(lb.DummyFactor)
 	if address == nil {
-		return nil, nil, errors.Errorf("No available endpoints")
+		return nil, func() {}, errors.Errorf("No available endpoints")
 	}
 
 	conn, teardown, err := g.getGRPCConnection(context.TODO(), address.String(), "", "", true, false, false)
 	if err != nil {
-		return nil, nil, errors.Errorf("error establishing connection to app grpc on address %s: %s", address, err)
+		return nil, teardown, errors.Errorf("error establishing connection to app grpc on address %s: %s", address, err)
 	}
 
 	return conn, func() {

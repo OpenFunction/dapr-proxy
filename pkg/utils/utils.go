@@ -5,9 +5,11 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"time"
 	"unsafe"
 
 	ofctx "github.com/OpenFunction/functions-framework-go/context"
+	"github.com/cenkalti/backoff/v4"
 	"github.com/pkg/errors"
 )
 
@@ -53,4 +55,18 @@ func GetEnvVar(key, fallbackValue string) string {
 		return strings.TrimSpace(val)
 	}
 	return fallbackValue
+}
+
+func NewExponentialBackOff() *backoff.ExponentialBackOff {
+	b := &backoff.ExponentialBackOff{
+		InitialInterval:     5 * time.Millisecond,
+		RandomizationFactor: 0.5,
+		Multiplier:          1.5,
+		MaxInterval:         100 * time.Millisecond,
+		MaxElapsedTime:      60 * time.Second,
+		Stop:                backoff.Stop,
+		Clock:               backoff.SystemClock,
+	}
+	b.Reset()
+	return b
 }
