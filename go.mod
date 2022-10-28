@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/OpenFunction/functions-framework-go v0.5.0
+	github.com/cenkalti/backoff/v4 v4.1.2
 	github.com/dapr/components-contrib v1.8.1-rc.1
 	github.com/dapr/dapr v1.8.3
 	github.com/dapr/go-sdk v1.5.0
@@ -25,7 +26,6 @@ require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr v0.0.0-20210826220005-b48c857c3a0e // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.2 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.4.1 // indirect
 	github.com/dapr/kit v0.0.2-0.20210614175626-b9074b64d233 // indirect

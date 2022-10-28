@@ -8,11 +8,9 @@ import (
 
 	ofctx "github.com/OpenFunction/functions-framework-go/context"
 	"github.com/OpenFunction/functions-framework-go/framework"
-	"github.com/cenkalti/backoff/v4"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime"
-	"github.com/pkg/errors"
 	"k8s.io/klog/v2"
 
 	proxyruntime "github.com/OpenFunction/dapr-proxy/pkg/runtime"
@@ -77,36 +75,32 @@ func EventHandler(ctx ofctx.Context, in []byte) (ofctx.Out, error) {
 	start := time.Now()
 	defer func() {
 		elapsed := diag.ElapsedSince(start)
+		pendingEventsCount := FuncRuntime.GetPendingEventsCount()
+		klog.V(4).Infof("Input: %s - Pending Events Count: %v", ctx.GetInputName(), pendingEventsCount)
 		klog.V(4).Infof("Input: %s - Event Forwarding Elapsed: %vms", ctx.GetInputName(), elapsed)
 	}()
 
 	c := ctx.GetNativeContext()
+	respCh := make(chan *proxyruntime.EventResponse, 1)
 
 	// Handle BindingEvent
 	bindingEvent := ctx.GetBindingEvent()
 	if bindingEvent != nil {
-		FuncRuntime.EnqueueBindingEvent(&c, bindingEvent)
+		event := proxyruntime.NewEvent(&c, bindingEvent, nil, respCh)
+		FuncRuntime.EnqueueEvent(&event)
 	}
 
 	// Handle TopicEvent
 	topicEvent := ctx.GetTopicEvent()
 	if topicEvent != nil {
-		FuncRuntime.EnqueueTopicEvent(&c, topicEvent)
+		event := proxyruntime.NewEvent(&c, nil, topicEvent, respCh)
+		FuncRuntime.EnqueueEvent(&event)
 	}
 
-	var resp *proxyruntime.EventResponse
-	err := backoff.Retry(func() error {
-		resp = FuncRuntime.GetEventResponse(&c)
-		if resp == nil {
-			return errors.New("Failed to get event response")
-		}
-		return nil
-	}, utils.NewExponentialBackOff())
-
-	if err != nil {
-		e := errors.New("Processing event timeout")
-		klog.Error(e)
-		return ctx.ReturnOnInternalError(), e
+	resp := <-respCh
+	if resp.Error != nil {
+		klog.Error(resp.Error)
+		return ctx.ReturnOnInternalError(), resp.Error
 	} else {
 		out := new(ofctx.FunctionOut)
 		out.WithData(resp.Data)

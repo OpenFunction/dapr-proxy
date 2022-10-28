@@ -60,9 +60,9 @@ func GetEnvVar(key, fallbackValue string) string {
 func NewExponentialBackOff() *backoff.ExponentialBackOff {
 	b := &backoff.ExponentialBackOff{
 		InitialInterval:     5 * time.Millisecond,
-		RandomizationFactor: 0.5,
-		Multiplier:          1.5,
-		MaxInterval:         100 * time.Millisecond,
+		RandomizationFactor: 0.2,
+		Multiplier:          1,
+		MaxInterval:         5 * time.Millisecond,
 		MaxElapsedTime:      60 * time.Second,
 		Stop:                backoff.Stop,
 		Clock:               backoff.SystemClock,
